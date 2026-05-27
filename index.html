@@ -656,7 +656,7 @@ function submitAll(){
   data[E.grammar]=STATE.lu;                       // Language-in-Use -> Grammar score column
   data[E.percent]=pct;
   data[E.writingText]=STATE.writingText||'(none)';
-  data[E.aiFeedback]="[Spoken answer transcript] "+(STATE.spokenText||'(none)');
+  data[E.aiFeedback]=STATE.spokenText||'';
   data[E.teacher]=chosen.teacher;
   const f=document.createElement('form');
   f.action=CONFIG.FORM_URL;f.method='POST';f.target='sqa_sink';
