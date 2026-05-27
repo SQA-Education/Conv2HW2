@@ -446,14 +446,14 @@ const POWER_WORDS=["adapt","leverage","spearhead","initiate","coordinate","proac
   "results-oriented","results oriented","execute","resolve","facilitate","proficient",
   "specialize","develop","collaborate","monitor","pioneer","cultivate","surpass"];
 function checkWriting(){
-  const txt=document.getElementById('writingText').value.trim();
-  STATE.writingText=txt;
+  const qs=[0,1,2].map(i=>document.getElementById('fu'+i).value.trim());
+  STATE.writingText=qs.map((q,i)=>(i+1)+'. '+q).join('  ');
   const fb=document.getElementById('writingFb');
-  const words=txt.split(/\s+/).filter(Boolean);
-  const sentences=txt.split(/[.!?]+/).map(s=>s.trim()).filter(Boolean);
-  let msg='<strong>Saved \u2014 your teacher will read and grade this.</strong><br>';
-  msg+='\ud83d\udcdd '+words.length+' words \u00b7 '+sentences.length+' sentences';
-  if(words.length<15)msg+='<br>\ud83d\udca1 This looks short \u2014 try to write a bit more before moving on.';
+  const nonEmpty=qs.filter(Boolean);
+  const totalWords=qs.join(' ').split(/\s+/).filter(Boolean).length;
+  let msg='<strong>Saved \u2014 your teacher will read and grade these.</strong><br>';
+  msg+='\u270d\ufe0f '+nonEmpty.length+' of 3 questions written \u00b7 '+totalWords+' words total';
+  if(nonEmpty.length<3)msg+='<br>\ud83d\udca1 Try to write all 3 follow-up questions.';
   fb.innerHTML=msg;fb.className='feedback show info';
   document.getElementById('writingNext').style.display='inline-block';
 }
