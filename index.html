@@ -284,6 +284,12 @@ const CONFIG = {
   <div class="scorebig" id="finalPct">0%</div>
   <div class="scoreline" id="finalLine">—</div>
   <div class="breakdown" id="breakdown"></div>
+  <div style="background:var(--lilac);border:1px solid var(--line);border-radius:11px;
+       padding:12px 15px;font-size:.88rem;color:var(--purple-dark);margin:4px 0 8px;">
+    ℹ️ This score shows the <strong>75 auto-graded points</strong> (reading/listening,
+    vocabulary, speaking, language). Your <strong>writing is worth 25 more points</strong>
+    and will be graded by your teacher — so your final mark will be higher than the number above.
+  </div>
   <p style="font-size:.9rem;color:var(--muted);">Your answers, questions, and spoken
   response are recorded below. Press Finish to send everything to your teacher.</p>
   <button class="btn" id="finishBtn" onclick="submitAll()">Finish →</button>
@@ -302,8 +308,8 @@ const CONFIG = {
 /* ---------- state ---------- */
 const STATE={listening:0,vocab:0,writing:0,speaking:0,lu:0,
   writingText:"",spokenText:"",speakSecs:0};
-const MAX={listening:20,vocab:20,writing:25,speaking:25,lu:10};
-const TOTAL=100;
+const MAX={listening:20,vocab:20,writing:0,speaking:25,lu:10};
+const TOTAL=100; /* writing (25 pts) graded by teacher, counts 0 until then */
 
 /* ---------- class sections ---------- */
 (function(){
@@ -440,30 +446,15 @@ const POWER_WORDS=["adapt","leverage","spearhead","initiate","coordinate","proac
   "results-oriented","results oriented","execute","resolve","facilitate","proficient",
   "specialize","develop","collaborate","monitor","pioneer","cultivate","surpass"];
 function checkWriting(){
-  const qs=[0,1,2].map(i=>document.getElementById('fu'+i).value.trim());
-  STATE.writingText=qs.map((q,i)=>(i+1)+'. '+q).join('  ');
+  const txt=document.getElementById('writingText').value.trim();
+  STATE.writingText=txt;
   const fb=document.getElementById('writingFb');
-  const nonEmpty=qs.filter(Boolean);
-  const withMark=qs.filter(q=>q.includes('?'));
-  const lowAll=qs.join(' ').toLowerCase();
-  const powerHits=[...new Set(POWER_WORDS.filter(w=>lowAll.includes(w)))];
-
-  // loose, generous scoring
-  let score=0;
-  score+=nonEmpty.length*6;                       // up to 18 — one per real question
-  score+=Math.min(withMark.length,3)*2;           // up to 6 — proper question form
-  if(powerHits.length)score+=1;                   // small bonus for power-up word
-  // effort check — at least a few words each
-  const substantive=qs.filter(q=>q.split(/\s+/).filter(Boolean).length>=4).length;
-  if(substantive>=3)score=Math.max(score,score);  // no penalty, generous
-  score=Math.min(score,MAX.writing);
-  STATE.writing=score;
-
-  let msg='<strong>Saved — '+score+'/'+MAX.writing+' points.</strong><br>';
-  msg+='✍️ '+nonEmpty.length+' of 3 questions written · '+withMark.length+' end with "?"';
-  if(powerHits.length)msg+='<br>💪 Power-up word spotted: '+powerHits.join(', ');
-  if(nonEmpty.length<3)msg+='<br>👉 Try to write all 3 follow-up questions.';
-  fb.innerHTML=msg;fb.className='feedback show '+(score>=15?'ok':'info');
+  const words=txt.split(/\s+/).filter(Boolean);
+  const sentences=txt.split(/[.!?]+/).map(s=>s.trim()).filter(Boolean);
+  let msg='<strong>Saved \u2014 your teacher will read and grade this.</strong><br>';
+  msg+='\ud83d\udcdd '+words.length+' words \u00b7 '+sentences.length+' sentences';
+  if(words.length<15)msg+='<br>\ud83d\udca1 This looks short \u2014 try to write a bit more before moving on.';
+  fb.innerHTML=msg;fb.className='feedback show info';
   document.getElementById('writingNext').style.display='inline-block';
 }
 
@@ -474,40 +465,62 @@ function fmt(s){return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');}
 function toggleRec(){recording?stopRec():startRec();}
 function startRec(){
   secs=0;document.getElementById('timer').textContent='0:00';
+  STATE.spokenText='';
+  const tEl=document.getElementById('transcript');
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  recognition=null;
   if(SR){
-    recognition=new SR();recognition.continuous=true;
-    recognition.interimResults=true;recognition.lang='en-US';
-    let finalT='';
-    recognition.onresult=e=>{
-      let interim='';
-      for(let i=e.resultIndex;i<e.results.length;i++){
-        const t=e.results[i][0].transcript;
-        if(e.results[i].isFinal)finalT+=t+' ';else interim+=t;
-      }
-      STATE.spokenText=(finalT+interim).trim();
-      document.getElementById('transcript').textContent=STATE.spokenText||'Listening…';
-    };
-    recognition.onerror=()=>{
+    try{
+      recognition=new SR();
+      recognition.continuous=true;
+      recognition.interimResults=true;
+      recognition.lang='en-US';
+      let finalT='';
+      recognition.onresult=e=>{
+        let interim='';
+        for(let i=e.resultIndex;i<e.results.length;i++){
+          const t=e.results[i][0].transcript;
+          if(e.results[i].isFinal)finalT+=t+' ';else interim+=t;
+        }
+        STATE.spokenText=(finalT+interim).trim();
+        tEl.textContent=STATE.spokenText||'Listening…';
+      };
+      recognition.onerror=ev=>{
+        if(ev.error==='not-allowed'||ev.error==='service-not-allowed'){
+          document.getElementById('micStatus').textContent=
+            'Microphone blocked. Allow mic access in your browser, then tap Start again.';
+        } else if(ev.error==='no-speech'){
+          /* harmless on Safari — ignore */
+        } else {
+          document.getElementById('micStatus').textContent=
+            'Speech capture paused — keep speaking out loud, your time still counts.';
+        }
+      };
+      recognition.onend=()=>{
+        /* Safari/iOS stop the engine on their own; restart while still recording */
+        if(recording){try{recognition.start();}catch(e){}}
+      };
+      recognition.start();
+    }catch(e){
+      recognition=null;
       document.getElementById('micStatus').textContent=
-        'Microphone unavailable — keep speaking out loud, then press Next.';
-    };
-    try{recognition.start();}catch(e){}
+        'Speech capture unavailable here — speak out loud, then press Next.';
+    }
   } else {
     document.getElementById('micStatus').textContent=
-      'This browser can\u2019t capture speech — speak out loud, then press Next.';
+      'This browser can\u2019t transcribe speech — speak out loud, then press Next.';
   }
   recording=true;
-  document.getElementById('recBtn').textContent='⏹ Stop';
-  document.getElementById('micStatus').innerHTML='<span class="pulse"></span>Recording — answer your question!';
+  document.getElementById('recBtn').textContent='\u23f9 Stop';
+  document.getElementById('micStatus').innerHTML='<span class="pulse"></span>Recording \u2014 speak now!';
   timerInt=setInterval(()=>{secs++;document.getElementById('timer').textContent=fmt(secs);},1000);
 }
 function stopRec(){
   recording=false;
-  if(recognition){try{recognition.stop();}catch(e){}}
+  if(recognition){try{recognition.onend=null;recognition.stop();}catch(e){}}
   clearInterval(timerInt);
   STATE.speakSecs=secs;
-  document.getElementById('recBtn').textContent='🎤 Speak again';
+  document.getElementById('recBtn').textContent='\ud83c\udfa4 Speak again';
   document.getElementById('micStatus').textContent='Stopped. You can speak again or move on.';
   scoreSpeaking();
 }
@@ -608,12 +621,12 @@ function finish(){
     (STATE.listening+STATE.vocab+STATE.writing+STATE.speaking+STATE.lu)/TOTAL*100);
   document.getElementById('finalPct').textContent=pct+'%';
   document.getElementById('finalLine').textContent=
-    pct>=80?'Excellent work!':pct>=60?'Good effort — keep practicing!':'Completed — review and try the speaking again anytime.';
+    (pct>=75?'Top marks on the auto-graded sections!':pct>=50?'Good effort — keep practicing!':'Completed!');
   const bd=document.getElementById('breakdown');
   bd.innerHTML=
     row('Listening comprehension',STATE.listening,MAX.listening)+
     row('Vocabulary match',STATE.vocab,MAX.vocab)+
-    row('Writing — follow-up questions',STATE.writing,MAX.writing)+
+    writingRow()+
     row('Speaking — your answer ⭐',STATE.speaking,MAX.speaking)+
     row('Language in use',STATE.lu,MAX.lu)+
     row('Total',STATE.listening+STATE.vocab+STATE.writing+STATE.speaking+STATE.lu,TOTAL);
@@ -621,6 +634,9 @@ function finish(){
 }
 function row(label,got,max){
   return '<div><span>'+label+'</span><span>'+got+' / '+max+'</span></div>';
+}
+function writingRow(){
+  return '<div><span>Writing</span><span style="color:var(--purple-light);">graded by teacher</span></div>';
 }
 
 /* ===================== SILENT SUBMIT ===================== */
@@ -635,7 +651,7 @@ function submitAll(){
   data[E.session]=CONFIG.SESSION_LABEL;
   data[E.listening]=STATE.listening;
   data[E.vocab]=STATE.vocab;
-  data[E.writing]=STATE.writing;
+  data[E.writing]=""; /* blank — teacher grades writing */
   data[E.speaking]=STATE.speaking;
   data[E.grammar]=STATE.lu;                       // Language-in-Use -> Grammar score column
   data[E.percent]=pct;
